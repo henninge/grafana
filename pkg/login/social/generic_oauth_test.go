@@ -146,7 +146,7 @@ func TestSearchJSONForRole(t *testing.T) {
 	})
 }
 
-func TestUserInfoUsesIDTokenForRole(t *testing.T) {
+func TestUserInfoSearchesForRole(t *testing.T) {
 	Convey("Given a generic OAuth provider", t, func() {
 		provider := SocialGenericOAuth{
 			SocialBase: &SocialBase{
@@ -157,12 +157,13 @@ func TestUserInfoUsesIDTokenForRole(t *testing.T) {
 		tests := []struct {
 			Name              string
 			OAuth2Token       oauth2.Token
+			APIURLReponse     interface{}
 			OAuth2Extra       interface{}
 			RoleAttributePath string
 			ExpectedResult    string
 		}{
 			{
-				Name: "Given a simple OAuth2 id_token response and valid JMES path",
+				Name: "Given a valid id_token response and valid role path",
 				OAuth2Token: oauth2.Token{
 					AccessToken:  "",
 					TokenType:    "",
@@ -176,36 +177,8 @@ func TestUserInfoUsesIDTokenForRole(t *testing.T) {
 				RoleAttributePath: "role",
 				ExpectedResult:    "Admin",
 			},
-		}
-
-		for _, test := range tests {
-			provider.roleAttributePath = test.RoleAttributePath
-			Convey(test.Name, func() {
-				token := test.OAuth2Token.WithExtra(test.OAuth2Extra)
-				actualResult, _ := provider.UserInfo(&http.Client{}, token)
-				So(actualResult.Role, ShouldEqual, test.ExpectedResult)
-			})
-		}
-	})
-}
-
-func TestUserInfoUsesApiUrlForRole(t *testing.T) {
-	Convey("Given a generic OAuth provider", t, func() {
-		provider := SocialGenericOAuth{
-			SocialBase: &SocialBase{
-				log: log.New("generic_oauth_test"),
-			},
-		}
-
-		tests := []struct {
-			Name              string
-			OAuth2Token       oauth2.Token
-			APIURLReponse     interface{}
-			RoleAttributePath string
-			ExpectedResult    string
-		}{
 			{
-				Name: "Given a valid user token with an email, no id_token and a valid api url",
+				Name: "Given a valid user token with an email, no id_token and a valid api response",
 				OAuth2Token: oauth2.Token{
 					// { "email": "john.doe@example.com" }
 					AccessToken:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIn0.k5GwPcZvGe2BE_jgwN0ntz0nz4KlYhEd0hRRLApkTJ4",
@@ -220,7 +193,7 @@ func TestUserInfoUsesApiUrlForRole(t *testing.T) {
 				ExpectedResult:    "Admin",
 			},
 			{
-				Name: "Given a valid user token with an email, no id_token and a misconfigured api response",
+				Name: "Given a valid user token with an email, no id_token and a wrong role path",
 				OAuth2Token: oauth2.Token{
 					// { "email": "john.doe@example.com" }
 					AccessToken:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIn0.k5GwPcZvGe2BE_jgwN0ntz0nz4KlYhEd0hRRLApkTJ4",
@@ -234,6 +207,24 @@ func TestUserInfoUsesApiUrlForRole(t *testing.T) {
 				RoleAttributePath: "role",
 				ExpectedResult:    "",
 			},
+			{
+				Name: "Given a valid id_token with no role and a valid api response with a role",
+				OAuth2Token: oauth2.Token{
+					AccessToken:  "",
+					TokenType:    "",
+					RefreshToken: "",
+					Expiry:       time.Now(),
+				},
+				OAuth2Extra: map[string]interface{}{
+					// { "email": "john.doe@example.com" }
+					"id_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImpvaG4uZG9lQGV4YW1wbGUuY29tIn0.k5GwPcZvGe2BE_jgwN0ntz0nz4KlYhEd0hRRLApkTJ4",
+				},
+				APIURLReponse: map[string]interface{}{
+					"role": "Admin",
+				},
+				RoleAttributePath: "role",
+				ExpectedResult:    "Admin",
+			},
 		}
 
 		for _, test := range tests {
@@ -246,7 +237,8 @@ func TestUserInfoUsesApiUrlForRole(t *testing.T) {
 					_, _ = io.WriteString(w, string(response))
 				}))
 				provider.apiUrl = ts.URL
-				actualResult, _ := provider.UserInfo(ts.Client(), &test.OAuth2Token)
+				token := test.OAuth2Token.WithExtra(test.OAuth2Extra)
+				actualResult, _ := provider.UserInfo(ts.Client(), token)
 				So(actualResult.Role, ShouldEqual, test.ExpectedResult)
 			})
 		}
